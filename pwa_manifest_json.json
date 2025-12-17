@@ -1,0 +1,24 @@
+{
+  "name": "بینەری Google Sheet",
+  "short_name": "بینەری داتا",
+  "description": "بینەری داتای Google Sheet",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#667eea",
+  "theme_color": "#667eea",
+  "orientation": "portrait-primary",
+  "icons": [
+    {
+      "src": "https://www.gstatic.com/images/branding/product/1x/sheets_2020q4_192dp.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "https://www.gstatic.com/images/branding/product/1x/sheets_2020q4_512dp.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}
