@@ -1,0 +1,396 @@
+<!DOCTYPE html>
+<html lang="ckb" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>سیستەمی غیابی قوتابیان — ناسینەوەی ڕوو</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<script src="https://cdn.jsdelivr.net/npm/face-api.js@0.22.2/dist/face-api.min.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore-compat.js"></script>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Noto+Kufi+Arabic:wght@400;500;600;700;900&display=swap');
+  * { font-family: 'Noto Kufi Arabic', sans-serif; }
+  body { background: #0f1720; }
+  .glass { background: rgba(20,28,38,0.75); backdrop-filter: blur(10px); border: 1px solid rgba(255,255,255,0.06); }
+  .tab-active { background: #1f8a70 !important; color: #fff !important; }
+  video, canvas { border-radius: 1rem; }
+  #overlay { position: absolute; top: 0; right: 0; }
+  ::-webkit-scrollbar { width: 8px; }
+  ::-webkit-scrollbar-thumb { background: #1f8a70; border-radius: 4px; }
+</style>
+</head>
+<body class="min-h-screen text-slate-100">
+
+<div class="max-w-5xl mx-auto px-4 py-6">
+
+  <!-- Header -->
+  <header class="flex items-center justify-between mb-6">
+    <div>
+      <h1 class="text-2xl md:text-3xl font-black text-emerald-400">سیستەمی غیابی — ناسینەوەی ڕوو</h1>
+      <p id="statusLine" class="text-sm text-slate-400 mt-1">بارکردنی مۆدێلەکانی ناسینەوەی ڕوو...</p>
+    </div>
+    <div id="dbBadge" class="hidden md:flex items-center gap-2 text-xs px-3 py-1.5 rounded-full glass">
+      <span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+      <span>بەردەستە</span>
+    </div>
+  </header>
+
+  <!-- Tabs -->
+  <nav class="flex gap-2 mb-6 flex-wrap">
+    <button data-tab="register" class="tab-btn px-4 py-2 rounded-xl glass font-semibold text-sm tab-active">➕ تۆمارکردنی قوتابی</button>
+    <button data-tab="attend" class="tab-btn px-4 py-2 rounded-xl glass font-semibold text-sm">📷 وەرگرتنی غیاب</button>
+    <button data-tab="report" class="tab-btn px-4 py-2 rounded-xl glass font-semibold text-sm">📋 لیستی غیاب</button>
+    <button data-tab="students" class="tab-btn px-4 py-2 rounded-xl glass font-semibold text-sm">👥 قوتابیان</button>
+  </nav>
+
+  <!-- REGISTER TAB -->
+  <section id="tab-register" class="tab-panel">
+    <div class="glass rounded-2xl p-5 grid md:grid-cols-2 gap-6">
+      <div>
+        <div class="relative w-full aspect-video bg-black rounded-2xl overflow-hidden">
+          <video id="regVideo" autoplay muted playsinline class="w-full h-full object-cover"></video>
+          <canvas id="regOverlay" class="absolute top-0 right-0 w-full h-full"></canvas>
+        </div>
+        <p class="text-xs text-slate-400 mt-2">ڕووی قوتابی ڕاست بخە بەرامبەر کامێراکە، دواتر وێنە بگرە.</p>
+      </div>
+      <div class="flex flex-col gap-3">
+        <label class="text-sm text-slate-300">ناوی قوتابی</label>
+        <input id="regName" class="bg-slate-800/70 border border-slate-700 rounded-xl px-4 py-2.5 outline-none focus:border-emerald-400" placeholder="بۆ نموونە: ئاوات محمد">
+        <label class="text-sm text-slate-300">پۆل / تاقم</label>
+        <input id="regClass" class="bg-slate-800/70 border border-slate-700 rounded-xl px-4 py-2.5 outline-none focus:border-emerald-400" placeholder="بۆ نموونە: پۆلی ٦-A">
+        <button id="captureBtn" class="mt-2 bg-emerald-500 hover:bg-emerald-600 transition text-white font-bold py-2.5 rounded-xl">📸 وێنەگرتن و پشکنینی ڕوو</button>
+        <div id="regPreview" class="hidden flex items-center gap-3 bg-slate-800/50 rounded-xl p-3">
+          <span class="text-emerald-400 text-sm">✅ ڕووەکە ناسرایەوە، ئامادەیە بۆ پاشەکەوتکردن</span>
+        </div>
+        <button id="saveStudentBtn" disabled class="bg-blue-600 hover:bg-blue-700 disabled:opacity-40 disabled:cursor-not-allowed transition text-white font-bold py-2.5 rounded-xl">💾 پاشەکەوتکردنی قوتابی</button>
+        <p id="regMsg" class="text-sm mt-1"></p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ATTEND TAB -->
+  <section id="tab-attend" class="tab-panel hidden">
+    <div class="glass rounded-2xl p-5">
+      <div class="flex items-center justify-between mb-4 flex-wrap gap-2">
+        <div>
+          <span class="text-sm text-slate-400">ڕێکەوت: </span>
+          <span id="todayDate" class="font-bold text-emerald-400"></span>
+        </div>
+        <button id="toggleScanBtn" class="bg-emerald-500 hover:bg-emerald-600 transition text-white font-bold px-5 py-2 rounded-xl">▶️ دەستپێکردنی سکان</button>
+      </div>
+      <div class="grid md:grid-cols-2 gap-6">
+        <div class="relative w-full aspect-video bg-black rounded-2xl overflow-hidden">
+          <video id="attVideo" autoplay muted playsinline class="w-full h-full object-cover"></video>
+          <canvas id="attOverlay" class="absolute top-0 right-0 w-full h-full"></canvas>
+        </div>
+        <div>
+          <h3 class="font-bold text-slate-300 mb-2">غیابی ئەمڕۆ (<span id="presentCount">0</span>)</h3>
+          <div id="liveList" class="flex flex-col gap-2 max-h-96 overflow-y-auto"></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- REPORT TAB -->
+  <section id="tab-report" class="tab-panel hidden">
+    <div class="glass rounded-2xl p-5">
+      <div class="flex items-center gap-3 mb-4 flex-wrap">
+        <label class="text-sm text-slate-300">ڕێکەوت:</label>
+        <input id="reportDate" type="date" class="bg-slate-800/70 border border-slate-700 rounded-xl px-3 py-2 outline-none focus:border-emerald-400">
+        <button id="loadReportBtn" class="bg-blue-600 hover:bg-blue-700 transition text-white font-semibold px-4 py-2 rounded-xl text-sm">پیشاندان</button>
+        <button id="exportCsvBtn" class="bg-slate-700 hover:bg-slate-600 transition text-white font-semibold px-4 py-2 rounded-xl text-sm">⬇️ CSV</button>
+      </div>
+      <div class="overflow-x-auto">
+        <table class="w-full text-sm">
+          <thead>
+            <tr class="text-slate-400 border-b border-slate-700">
+              <th class="text-right py-2">ناو</th>
+              <th class="text-right py-2">پۆل</th>
+              <th class="text-right py-2">کاتژمێر</th>
+            </tr>
+          </thead>
+          <tbody id="reportBody"></tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+
+  <!-- STUDENTS TAB -->
+  <section id="tab-students" class="tab-panel hidden">
+    <div class="glass rounded-2xl p-5">
+      <div class="overflow-x-auto">
+        <table class="w-full text-sm">
+          <thead>
+            <tr class="text-slate-400 border-b border-slate-700">
+              <th class="text-right py-2">ناو</th>
+              <th class="text-right py-2">پۆل</th>
+              <th class="text-right py-2">کردار</th>
+            </tr>
+          </thead>
+          <tbody id="studentsBody"></tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+
+</div>
+
+<script>
+// ---------- Firebase ----------
+const firebaseConfig = {
+  apiKey: "AIzaSyD3gM3NTJPWz_Gr2Y7RuGNVRNOabyMtPKQ",
+  authDomain: "booking-3170f.firebaseapp.com",
+  projectId: "booking-3170f",
+  storageBucket: "booking-3170f.firebasestorage.app",
+  messagingSenderId: "203735208883",
+  appId: "1:203735208883:web:a41f37d48f37c79610b1c6"
+};
+firebase.initializeApp(firebaseConfig);
+const db = firebase.firestore();
+
+// ---------- Tabs ----------
+document.querySelectorAll('.tab-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('tab-active'));
+    document.querySelectorAll('.tab-panel').forEach(p => p.classList.add('hidden'));
+    btn.classList.add('tab-active');
+    document.getElementById('tab-' + btn.dataset.tab).classList.remove('hidden');
+    if (btn.dataset.tab === 'students') renderStudentsTable();
+    if (btn.dataset.tab === 'attend') document.getElementById('todayDate').textContent = todayStr();
+  });
+});
+
+function todayStr() {
+  const d = new Date();
+  return d.toISOString().slice(0,10);
+}
+
+// ---------- Model loading ----------
+const MODEL_URL = 'https://cdn.jsdelivr.net/gh/justadudewhohacks/face-api.js/weights';
+let modelsReady = false;
+
+async function loadModels() {
+  await faceapi.nets.tinyFaceDetector.loadFromUri(MODEL_URL);
+  await faceapi.nets.faceLandmark68Net.loadFromUri(MODEL_URL);
+  await faceapi.nets.faceRecognitionNet.loadFromUri(MODEL_URL);
+  modelsReady = true;
+  document.getElementById('statusLine').textContent = 'مۆدێلەکان بارکران ✅ — کامێراکان ئامادەن';
+}
+loadModels();
+
+async function startCamera(videoEl) {
+  const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'user' } });
+  videoEl.srcObject = stream;
+  return new Promise(res => { videoEl.onloadedmetadata = () => res(); });
+}
+
+// ---------- Register tab ----------
+const regVideo = document.getElementById('regVideo');
+let regDescriptor = null;
+
+startCamera(regVideo).catch(err => {
+  document.getElementById('regMsg').textContent = 'نەتوانرا کامێرا بکرێتەوە: ' + err.message;
+});
+
+document.getElementById('captureBtn').addEventListener('click', async () => {
+  const msg = document.getElementById('regMsg');
+  if (!modelsReady) { msg.textContent = 'تکایە چاوەڕێی بارکردنی مۆدێلەکان بکە...'; return; }
+  msg.textContent = 'پشکنین بۆ ڕوو...';
+  const detection = await faceapi.detectSingleFace(regVideo, new faceapi.TinyFaceDetectorOptions())
+    .withFaceLandmarks().withFaceDescriptor();
+  if (!detection) {
+    msg.textContent = '❌ هیچ ڕوویەک نەدۆزرایەوە، دووبارە هەوڵبدەوە.';
+    document.getElementById('regPreview').classList.add('hidden');
+    document.getElementById('saveStudentBtn').disabled = true;
+    return;
+  }
+  regDescriptor = Array.from(detection.descriptor);
+  document.getElementById('regPreview').classList.remove('hidden');
+  document.getElementById('saveStudentBtn').disabled = false;
+  msg.textContent = '';
+});
+
+document.getElementById('saveStudentBtn').addEventListener('click', async () => {
+  const name = document.getElementById('regName').value.trim();
+  const cls = document.getElementById('regClass').value.trim();
+  const msg = document.getElementById('regMsg');
+  if (!name) { msg.textContent = 'تکایە ناوی قوتابی بنووسە.'; return; }
+  if (!regDescriptor) { msg.textContent = 'تکایە یەکەم جار وێنە بگرە.'; return; }
+  try {
+    await db.collection('students').add({
+      name, class: cls, descriptor: regDescriptor,
+      createdAt: firebase.firestore.FieldValue.serverTimestamp()
+    });
+    msg.textContent = '✅ قوتابی بە سەرکەوتوویی تۆمارکرا.';
+    document.getElementById('regName').value = '';
+    document.getElementById('regClass').value = '';
+    regDescriptor = null;
+    document.getElementById('regPreview').classList.add('hidden');
+    document.getElementById('saveStudentBtn').disabled = true;
+    studentsCache = null;
+  } catch (e) {
+    msg.textContent = 'هەڵە: ' + e.message;
+  }
+});
+
+// ---------- Students cache / table ----------
+let studentsCache = null;
+
+async function fetchStudents() {
+  if (studentsCache) return studentsCache;
+  const snap = await db.collection('students').get();
+  studentsCache = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+  return studentsCache;
+}
+
+async function renderStudentsTable() {
+  const students = await fetchStudents();
+  const body = document.getElementById('studentsBody');
+  body.innerHTML = students.map(s => `
+    <tr class="border-b border-slate-800">
+      <td class="py-2">${s.name}</td>
+      <td class="py-2">${s.class || '-'}</td>
+      <td class="py-2"><button data-id="${s.id}" class="del-student text-red-400 hover:text-red-300 text-xs">سڕینەوە</button></td>
+    </tr>`).join('') || `<tr><td colspan="3" class="py-4 text-slate-500 text-center">هیچ قوتابییەک تۆمار نەکراوە</td></tr>`;
+  document.querySelectorAll('.del-student').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      if (!confirm('دڵنیایت لە سڕینەوە؟')) return;
+      await db.collection('students').doc(btn.dataset.id).delete();
+      studentsCache = null;
+      renderStudentsTable();
+    });
+  });
+}
+
+// ---------- Attendance scanning ----------
+const attVideo = document.getElementById('attVideo');
+const attOverlay = document.getElementById('attOverlay');
+let scanning = false;
+let scanLoopHandle = null;
+let faceMatcher = null;
+let markedToday = new Set();
+let presentCount = 0;
+
+document.getElementById('toggleScanBtn').addEventListener('click', async () => {
+  const btn = document.getElementById('toggleScanBtn');
+  if (!scanning) {
+    if (!modelsReady) { alert('چاوەڕێی بارکردنی مۆدێلەکان بکە.'); return; }
+    await startCamera(attVideo);
+    const students = await fetchStudents();
+    if (students.length === 0) { alert('هیچ قوتابییەک تۆمار نەکراوە.'); return; }
+    const labeled = students.map(s => new faceapi.LabeledFaceDescriptors(s.id, [new Float32Array(s.descriptor)]));
+    faceMatcher = new faceapi.FaceMatcher(labeled, 0.5);
+    await loadTodayAttendance();
+    scanning = true;
+    btn.textContent = '⏸ ڕاگرتنی سکان';
+    scanLoop(students);
+  } else {
+    scanning = false;
+    btn.textContent = '▶️ دەستپێکردنی سکان';
+    if (scanLoopHandle) cancelAnimationFrame(scanLoopHandle);
+    const stream = attVideo.srcObject;
+    if (stream) stream.getTracks().forEach(t => t.stop());
+  }
+});
+
+async function loadTodayAttendance() {
+  markedToday = new Set();
+  presentCount = 0;
+  document.getElementById('liveList').innerHTML = '';
+  const snap = await db.collection('attendance').where('date', '==', todayStr()).get();
+  const students = await fetchStudents();
+  const byId = Object.fromEntries(students.map(s => [s.id, s]));
+  snap.docs.forEach(d => {
+    const data = d.data();
+    markedToday.add(data.studentId);
+    presentCount++;
+    addLiveRow(byId[data.studentId] || { name: data.name, class: data.class }, data.time);
+  });
+  document.getElementById('presentCount').textContent = presentCount;
+}
+
+function addLiveRow(student, time) {
+  const row = document.createElement('div');
+  row.className = 'flex items-center justify-between bg-slate-800/50 rounded-xl px-3 py-2';
+  row.innerHTML = `<span class="font-semibold">${student.name}</span><span class="text-xs text-slate-400">${student.class || ''} · ${time}</span>`;
+  document.getElementById('liveList').prepend(row);
+}
+
+async function scanLoop(students) {
+  if (!scanning) return;
+  const ctx = attOverlay.getContext('2d');
+  attOverlay.width = attVideo.videoWidth;
+  attOverlay.height = attVideo.videoHeight;
+
+  const detections = await faceapi.detectAllFaces(attVideo, new faceapi.TinyFaceDetectorOptions())
+    .withFaceLandmarks().withFaceDescriptors();
+
+  ctx.clearRect(0, 0, attOverlay.width, attOverlay.height);
+  const byId = Object.fromEntries(students.map(s => [s.id, s]));
+
+  for (const det of detections) {
+    const match = faceMatcher.findBestMatch(det.descriptor);
+    const box = det.detection.box;
+    const isKnown = match.label !== 'unknown';
+    ctx.strokeStyle = isKnown ? '#1f8a70' : '#ef4444';
+    ctx.lineWidth = 3;
+    ctx.strokeRect(box.x, box.y, box.width, box.height);
+    const label = isKnown ? byId[match.label]?.name || 'نەناسراو' : 'نەناسراو';
+    ctx.fillStyle = isKnown ? '#1f8a70' : '#ef4444';
+    ctx.font = '18px sans-serif';
+    ctx.fillText(label, box.x, box.y - 8);
+
+    if (isKnown && !markedToday.has(match.label)) {
+      markedToday.add(match.label);
+      const student = byId[match.label];
+      const now = new Date();
+      const time = now.toLocaleTimeString('en-GB');
+      db.collection('attendance').add({
+        studentId: match.label,
+        name: student.name,
+        class: student.class || '',
+        date: todayStr(),
+        time,
+        timestamp: firebase.firestore.FieldValue.serverTimestamp()
+      });
+      presentCount++;
+      document.getElementById('presentCount').textContent = presentCount;
+      addLiveRow(student, time);
+    }
+  }
+  scanLoopHandle = requestAnimationFrame(() => scanLoop(students));
+}
+
+// ---------- Report tab ----------
+document.getElementById('reportDate').value = todayStr();
+
+document.getElementById('loadReportBtn').addEventListener('click', loadReport);
+
+async function loadReport() {
+  const date = document.getElementById('reportDate').value || todayStr();
+  const snap = await db.collection('attendance').where('date', '==', date).orderBy('time').get();
+  const body = document.getElementById('reportBody');
+  body.innerHTML = snap.docs.map(d => {
+    const r = d.data();
+    return `<tr class="border-b border-slate-800"><td class="py-2">${r.name}</td><td class="py-2">${r.class || '-'}</td><td class="py-2">${r.time}</td></tr>`;
+  }).join('') || `<tr><td colspan="3" class="py-4 text-slate-500 text-center">هیچ غیابێک نییە بۆ ئەم ڕۆژە</td></tr>`;
+  window.__lastReport = snap.docs.map(d => d.data());
+}
+
+document.getElementById('exportCsvBtn').addEventListener('click', () => {
+  const rows = window.__lastReport || [];
+  if (rows.length === 0) { alert('هیچ داتایەک نییە بۆ دەرهێنان.'); return; }
+  let csv = 'Name,Class,Time,Date\n';
+  rows.forEach(r => { csv += `${r.name},${r.class || ''},${r.time},${r.date}\n`; });
+  const blob = new Blob([csv], { type: 'text/csv' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = `attendance_${document.getElementById('reportDate').value}.csv`;
+  a.click();
+});
+
+document.getElementById('todayDate').textContent = todayStr();
+</script>
+</body>
+</html>
