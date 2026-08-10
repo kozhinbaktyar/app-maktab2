@@ -6,14 +6,6 @@
 <title>سکانەری غیاب — بەڕێوەبەری قوتابخانە</title>
 <script src="https://cdn.tailwindcss.com"></script>
 <script src="https://cdn.jsdelivr.net/npm/face-api.js@0.22.2/dist/face-api.min.js"></script>
-<script type="module">
-  import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
-  import {
-    getFirestore, collection, doc, getDoc, getDocs, setDoc, deleteDoc,
-    onSnapshot, query, where, collectionGroup, serverTimestamp
-  } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
-  window.__fb = { initializeApp, getFirestore, collection, doc, getDoc, getDocs, setDoc, deleteDoc, onSnapshot, query, where, collectionGroup, serverTimestamp };
-</script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <link href="https://fonts.googleapis.com/css2?family=Noto+Kufi+Arabic:wght@400;500;600;700;900&display=swap" rel="stylesheet">
@@ -155,8 +147,12 @@
   </table>
 </div>
 
-<script>
-const { initializeApp, getFirestore, collection, doc, getDoc, getDocs, setDoc, deleteDoc, onSnapshot, query, where, collectionGroup, serverTimestamp } = window.__fb;
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
+import {
+  getFirestore, collection, doc, getDoc, getDocs, setDoc, deleteDoc,
+  onSnapshot, query, where, collectionGroup, serverTimestamp
+} from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
 
 const firebaseConfig = {
   apiKey: "AIzaSyAsDs_tQemRJwwjH0m8U2YvlqZjWXHEO0k",
