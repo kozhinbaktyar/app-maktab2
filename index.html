@@ -372,14 +372,28 @@ document.getElementById('toggleScanBtn').addEventListener('click', async () => {
   const btn = document.getElementById('toggleScanBtn');
   if (!scanning) {
     if (!modelsReady) { alert('چاوەڕێی بارکردنی مۆدێلەکان بکە.'); return; }
-    await startCamera('att', attVideo);
-    const students = await fetchStudents();
-    if (students.length === 0) { alert('هیچ قوتابییەک تۆمار نەکراوە.'); return; }
-    const labeled = students.map(s => new faceapi.LabeledFaceDescriptors(s.id, [new Float32Array(s.descriptor)]));
-    faceMatcher = new faceapi.FaceMatcher(labeled, 0.5);
-    scanning = true;
-    btn.textContent = '⏸ ڕاگرتنی سکان';
-    scanLoop(students);
+    try {
+      await startCamera('att', attVideo);
+      const students = await fetchStudents();
+      if (students.length === 0) { alert('هیچ قوتابییەک تۆمار نەکراوە.'); return; }
+
+      const validStudents = students.filter(s => Array.isArray(s.descriptor) && s.descriptor.length === 128);
+      const invalidCount = students.length - validStudents.length;
+      if (invalidCount > 0) {
+        console.warn(`${invalidCount} قوتابی بەبێ داتای ڕوو، دەپەڕێنرێن لە سکانکردن.`);
+      }
+      if (validStudents.length === 0) { alert('هیچ قوتابییەک داتای ڕووی دروستی نییە. دووبارە لە بەشی "تۆمارکردن" وێنەیان بگرە.'); return; }
+
+      const labeled = validStudents.map(s => new faceapi.LabeledFaceDescriptors(s.id, [new Float32Array(s.descriptor)]));
+      faceMatcher = new faceapi.FaceMatcher(labeled, 0.6);
+      scanning = true;
+      btn.textContent = '⏸ ڕاگرتنی سکان';
+      scanLoop(validStudents);
+    } catch (e) {
+      console.error('هەڵەی دەستپێکردنی سکان:', e);
+      alert('نەتوانرا سکان دەستپێبکات: ' + e.message);
+      scanning = false;
+    }
   } else {
     scanning = false;
     btn.textContent = '▶️ دەستپێکردنی سکان';
@@ -390,31 +404,35 @@ document.getElementById('toggleScanBtn').addEventListener('click', async () => {
 
 async function scanLoop(students) {
   if (!scanning) return;
-  const ctx = attOverlay.getContext('2d');
-  attOverlay.width = attVideo.videoWidth;
-  attOverlay.height = attVideo.videoHeight;
+  try {
+    const ctx = attOverlay.getContext('2d');
+    attOverlay.width = attVideo.videoWidth;
+    attOverlay.height = attVideo.videoHeight;
 
-  const detections = await faceapi.detectAllFaces(attVideo, new faceapi.TinyFaceDetectorOptions())
-    .withFaceLandmarks().withFaceDescriptors();
+    const detections = await faceapi.detectAllFaces(attVideo, new faceapi.TinyFaceDetectorOptions())
+      .withFaceLandmarks().withFaceDescriptors();
 
-  ctx.clearRect(0, 0, attOverlay.width, attOverlay.height);
-  const byId = Object.fromEntries(students.map(s => [s.id, s]));
+    ctx.clearRect(0, 0, attOverlay.width, attOverlay.height);
+    const byId = Object.fromEntries(students.map(s => [s.id, s]));
 
-  for (const det of detections) {
-    const match = faceMatcher.findBestMatch(det.descriptor);
-    const box = det.detection.box;
-    const isKnown = match.label !== 'unknown';
-    ctx.strokeStyle = isKnown ? '#1f8a70' : '#ef4444';
-    ctx.lineWidth = 3;
-    ctx.strokeRect(box.x, box.y, box.width, box.height);
-    const label = isKnown ? byId[match.label]?.name || 'نەناسراو' : 'نەناسراو';
-    ctx.fillStyle = isKnown ? '#1f8a70' : '#ef4444';
-    ctx.font = '18px sans-serif';
-    ctx.fillText(label, box.x, box.y - 8);
+    for (const det of detections) {
+      const match = faceMatcher.findBestMatch(det.descriptor);
+      const box = det.detection.box;
+      const isKnown = match.label !== 'unknown';
+      ctx.strokeStyle = isKnown ? '#1f8a70' : '#ef4444';
+      ctx.lineWidth = 3;
+      ctx.strokeRect(box.x, box.y, box.width, box.height);
+      const label = isKnown ? byId[match.label]?.name || 'نەناسراو' : 'نەناسراو';
+      ctx.fillStyle = isKnown ? '#1f8a70' : '#ef4444';
+      ctx.font = '18px sans-serif';
+      ctx.fillText(label, box.x, box.y - 8);
 
-    if (isKnown && (!currentAttendanceMap[match.label] || currentAttendanceMap[match.label].status !== 'present')) {
-      manualSetStatus(match.label, 'present');
+      if (isKnown && (!currentAttendanceMap[match.label] || currentAttendanceMap[match.label].status !== 'present')) {
+        manualSetStatus(match.label, 'present');
+      }
     }
+  } catch (e) {
+    console.error('هەڵەی سکانکردن (فرەیمێک پەڕێنرا):', e);
   }
   scanLoopHandle = requestAnimationFrame(() => scanLoop(students));
 }
@@ -424,43 +442,61 @@ document.getElementById('loadReportBtn').addEventListener('click', async () => {
   const min = parseInt(document.getElementById('minAbsentDays').value, 10) || 3;
   const msg = document.getElementById('reportMsg');
   msg.textContent = 'بارکردن...';
-  const q = query(collectionGroup(db, 'records'), where('status', '==', 'absent'));
-  const snap = await getDocs(q);
-  const counts = {}; // studentId -> {count, name, class}
-  snap.docs.forEach(d => {
-    const r = d.data();
-    if (!r.studentId) return;
-    if (!counts[r.studentId]) counts[r.studentId] = { count: 0, name: r.name, class: r.class };
-    counts[r.studentId].count++;
-  });
-  const rows = Object.values(counts).filter(c => c.count >= min).sort((a,b) => b.count - a.count);
-  const body = document.getElementById('reportBody');
-  body.innerHTML = rows.map(r => `
-    <tr class="border-b border-slate-800">
-      <td class="py-2">${r.name}</td><td class="py-2">${r.class || '-'}</td>
-      <td class="py-2 text-red-400 font-bold">${r.count}</td>
-    </tr>`).join('') || `<tr><td colspan="3" class="py-4 text-slate-500 text-center">هیچ قوتابییەک نییە بەم مەرجە</td></tr>`;
-  msg.textContent = `${rows.length} قوتابی دۆزرایەوە`;
+  try {
+    const q = query(collectionGroup(db, 'records'), where('status', '==', 'absent'));
+    const snap = await getDocs(q);
+    const counts = {}; // studentId -> {count, name, class}
+    snap.docs.forEach(d => {
+      const r = d.data();
+      if (!r.studentId) return;
+      if (!counts[r.studentId]) counts[r.studentId] = { count: 0, name: r.name, class: r.class };
+      counts[r.studentId].count++;
+    });
+    const rows = Object.values(counts).filter(c => c.count >= min).sort((a,b) => b.count - a.count);
+    const body = document.getElementById('reportBody');
+    body.innerHTML = rows.map(r => `
+      <tr class="border-b border-slate-800">
+        <td class="py-2">${r.name}</td><td class="py-2">${r.class || '-'}</td>
+        <td class="py-2 text-red-400 font-bold">${r.count}</td>
+      </tr>`).join('') || `<tr><td colspan="3" class="py-4 text-slate-500 text-center">هیچ قوتابییەک نییە بەم مەرجە</td></tr>`;
+    msg.textContent = `${rows.length} قوتابی دۆزرایەوە`;
+  } catch (e) {
+    console.error('هەڵەی ڕاپۆرت:', e);
+    if (e.code === 'failed-precondition' || /index/i.test(e.message)) {
+      msg.textContent = '⚠️ پێویستە Firestore Index دروست بکەیت — کۆنسۆڵ (F12) بکەرەوە بۆ لینکی دروستکردنی.';
+    } else {
+      msg.textContent = 'هەڵە: ' + e.message;
+    }
+  }
 });
 
 // ---------- Delete student: export full history to PDF first ----------
 async function deleteStudentWithHistory(studentId, studentName) {
   if (!confirm(`پێش سڕینەوەی "${studentName}"، دەرهێنانی مێژووی تەواوی غیاب وەک PDF. بەردەوام بیت؟`)) return;
 
-  const q = query(collectionGroup(db, 'records'), where('studentId', '==', studentId));
-  const snap = await getDocs(q);
-  const rows = snap.docs.map(d => {
-    const r = d.data();
-    const date = d.ref.parent.parent.id;
-    return { date, status: r.status, time: r.time ? new Date(r.time).toLocaleTimeString('en-GB') : '' };
-  }).sort((a,b) => a.date.localeCompare(b.date));
+  try {
+    const q = query(collectionGroup(db, 'records'), where('studentId', '==', studentId));
+    const snap = await getDocs(q);
+    const rows = snap.docs.map(d => {
+      const r = d.data();
+      const date = d.ref.parent.parent.id;
+      return { date, status: r.status, time: r.time ? new Date(r.time).toLocaleTimeString('en-GB') : '' };
+    }).sort((a,b) => a.date.localeCompare(b.date));
 
-  await buildAndDownloadPdf(studentName, rows);
+    await buildAndDownloadPdf(studentName, rows);
 
-  await deleteDoc(doc(db, 'students', studentId));
-  studentsCache = null;
-  renderStudentsTable();
-  alert('✅ مێژووی قوتابی داگیرا وەک PDF و قوتابییەکە سڕایەوە.');
+    await deleteDoc(doc(db, 'students', studentId));
+    studentsCache = null;
+    renderStudentsTable();
+    alert('✅ مێژووی قوتابی داگیرا وەک PDF و قوتابییەکە سڕایەوە.');
+  } catch (e) {
+    console.error('هەڵەی سڕینەوە:', e);
+    if (e.code === 'failed-precondition' || /index/i.test(e.message)) {
+      alert('پێویستە Firestore Index دروست بکەیت پێش سڕینەوە.\n\nکۆنسۆڵ (F12 → Console) بکەرەوە — Firestore لینکێکی خۆکار دەنێرێت بۆ دروستکردنی index بە یەک کلیک. کلیکی لەسەر بکە، چاوەڕێی چەند خولەکێک بکە تا index-ەکە ئامادە دەبێت، پاشان دووبارە سڕینەوە تاقی بکەرەوە.');
+    } else {
+      alert('هەڵەیەک ڕوویدا: ' + e.message);
+    }
+  }
 }
 
 async function buildAndDownloadPdf(studentName, rows) {
