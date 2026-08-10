@@ -1,58 +1,68 @@
 <!DOCTYPE html>
-<html lang="ckb" dir="rtl">
+<html lang="ku" dir="rtl">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>سیستەمی غیابی قوتابیان — ناسینەوەی ڕوو</title>
+<title>سکانەری غیاب — بەڕێوەبەری قوتابخانە</title>
 <script src="https://cdn.tailwindcss.com"></script>
 <script src="https://cdn.jsdelivr.net/npm/face-api.js@0.22.2/dist/face-api.min.js"></script>
-<script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-app-compat.js"></script>
-<script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore-compat.js"></script>
+<script type="module">
+  import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
+  import {
+    getFirestore, collection, doc, getDoc, getDocs, setDoc, deleteDoc,
+    onSnapshot, query, where, collectionGroup, serverTimestamp
+  } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
+  window.__fb = { initializeApp, getFirestore, collection, doc, getDoc, getDocs, setDoc, deleteDoc, onSnapshot, query, where, collectionGroup, serverTimestamp };
+</script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Kufi+Arabic:wght@400;500;600;700;900&display=swap" rel="stylesheet">
 <style>
-  @import url('https://fonts.googleapis.com/css2?family=Noto+Kufi+Arabic:wght@400;500;600;700;900&display=swap');
   * { font-family: 'Noto Kufi Arabic', sans-serif; }
   body { background: #0f1720; }
   .glass { background: rgba(20,28,38,0.75); backdrop-filter: blur(10px); border: 1px solid rgba(255,255,255,0.06); }
   .tab-active { background: #1f8a70 !important; color: #fff !important; }
-  video, canvas { border-radius: 1rem; }
-  #overlay { position: absolute; top: 0; right: 0; }
+  #overlay-reg, #overlay-att { position: absolute; top: 0; right: 0; }
   ::-webkit-scrollbar { width: 8px; }
   ::-webkit-scrollbar-thumb { background: #1f8a70; border-radius: 4px; }
+  .status-chip { font-size: 11px; padding: 3px 9px; border-radius: 999px; font-weight: 700; cursor: pointer; border: 1.5px solid transparent; }
+  .status-chip.active-present { background:#2f9e6b; color:#fff; }
+  .status-chip.active-absent { background:#c0392b; color:#fff; }
+  .status-chip.active-forgot-card { background:#3498db; color:#fff; }
+  .status-chip.active-leave { background:#d4a017; color:#fff; }
+  .status-chip.idle { background:#1e293b; color:#94a3b8; }
 </style>
 </head>
 <body class="min-h-screen text-slate-100">
 
-<div class="max-w-5xl mx-auto px-4 py-6">
+<div class="max-w-6xl mx-auto px-4 py-6">
 
-  <!-- Header -->
-  <header class="flex items-center justify-between mb-6">
+  <header class="flex items-center justify-between mb-6 flex-wrap gap-3">
     <div>
-      <h1 class="text-2xl md:text-3xl font-black text-emerald-400">سیستەمی غیابی — ناسینەوەی ڕوو</h1>
+      <h1 class="text-2xl md:text-3xl font-black text-emerald-400">سکانەری غیاب — بەڕێوەبەر</h1>
       <p id="statusLine" class="text-sm text-slate-400 mt-1">بارکردنی مۆدێلەکانی ناسینەوەی ڕوو...</p>
-    </div>
-    <div id="dbBadge" class="hidden md:flex items-center gap-2 text-xs px-3 py-1.5 rounded-full glass">
-      <span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
-      <span>بەردەستە</span>
     </div>
   </header>
 
-  <!-- Tabs -->
   <nav class="flex gap-2 mb-6 flex-wrap">
     <button data-tab="register" class="tab-btn px-4 py-2 rounded-xl glass font-semibold text-sm tab-active">➕ تۆمارکردنی قوتابی</button>
     <button data-tab="attend" class="tab-btn px-4 py-2 rounded-xl glass font-semibold text-sm">📷 وەرگرتنی غیاب</button>
-    <button data-tab="report" class="tab-btn px-4 py-2 rounded-xl glass font-semibold text-sm">📋 لیستی غیاب</button>
+    <button data-tab="report" class="tab-btn px-4 py-2 rounded-xl glass font-semibold text-sm">📊 ڕاپۆرتی غیابی زۆر</button>
     <button data-tab="students" class="tab-btn px-4 py-2 rounded-xl glass font-semibold text-sm">👥 قوتابیان</button>
   </nav>
 
-  <!-- REGISTER TAB -->
+  <!-- REGISTER -->
   <section id="tab-register" class="tab-panel">
     <div class="glass rounded-2xl p-5 grid md:grid-cols-2 gap-6">
       <div>
         <div class="relative w-full aspect-video bg-black rounded-2xl overflow-hidden">
           <video id="regVideo" autoplay muted playsinline class="w-full h-full object-cover"></video>
-          <canvas id="regOverlay" class="absolute top-0 right-0 w-full h-full"></canvas>
+          <canvas id="overlay-reg" class="w-full h-full"></canvas>
         </div>
-        <p class="text-xs text-slate-400 mt-2">ڕووی قوتابی ڕاست بخە بەرامبەر کامێراکە، دواتر وێنە بگرە.</p>
+        <div class="flex justify-between items-center mt-2">
+          <p class="text-xs text-slate-400">ڕووی قوتابی ڕاست بخە بەرامبەر کامێراکە.</p>
+          <button id="switchCamReg" class="text-xs bg-slate-700 hover:bg-slate-600 px-3 py-1.5 rounded-lg">🔄 گۆڕینی کامێرا</button>
+        </div>
       </div>
       <div class="flex flex-col gap-3">
         <label class="text-sm text-slate-300">ناوی قوتابی</label>
@@ -60,7 +70,7 @@
         <label class="text-sm text-slate-300">پۆل / تاقم</label>
         <input id="regClass" class="bg-slate-800/70 border border-slate-700 rounded-xl px-4 py-2.5 outline-none focus:border-emerald-400" placeholder="بۆ نموونە: پۆلی ٦-A">
         <button id="captureBtn" class="mt-2 bg-emerald-500 hover:bg-emerald-600 transition text-white font-bold py-2.5 rounded-xl">📸 وێنەگرتن و پشکنینی ڕوو</button>
-        <div id="regPreview" class="hidden flex items-center gap-3 bg-slate-800/50 rounded-xl p-3">
+        <div id="regPreview" class="hidden bg-slate-800/50 rounded-xl p-3">
           <span class="text-emerald-400 text-sm">✅ ڕووەکە ناسرایەوە، ئامادەیە بۆ پاشەکەوتکردن</span>
         </div>
         <button id="saveStudentBtn" disabled class="bg-blue-600 hover:bg-blue-700 disabled:opacity-40 disabled:cursor-not-allowed transition text-white font-bold py-2.5 rounded-xl">💾 پاشەکەوتکردنی قوتابی</button>
@@ -69,65 +79,62 @@
     </div>
   </section>
 
-  <!-- ATTEND TAB -->
+  <!-- ATTEND -->
   <section id="tab-attend" class="tab-panel hidden">
     <div class="glass rounded-2xl p-5">
       <div class="flex items-center justify-between mb-4 flex-wrap gap-2">
-        <div>
-          <span class="text-sm text-slate-400">ڕێکەوت: </span>
-          <span id="todayDate" class="font-bold text-emerald-400"></span>
+        <div><span class="text-sm text-slate-400">ڕێکەوت: </span><span id="todayDate" class="font-bold text-emerald-400"></span></div>
+        <div class="flex gap-2">
+          <button id="switchCamAtt" class="text-xs bg-slate-700 hover:bg-slate-600 px-3 py-1.5 rounded-lg">🔄 گۆڕینی کامێرا</button>
+          <button id="markRestAbsentBtn" class="text-xs bg-red-600/80 hover:bg-red-600 px-3 py-1.5 rounded-lg">🚫 نیشانکردنی ماوە وەک نەهاتوو</button>
+          <button id="toggleScanBtn" class="bg-emerald-500 hover:bg-emerald-600 transition text-white font-bold px-5 py-2 rounded-xl text-sm">▶️ دەستپێکردنی سکان</button>
         </div>
-        <button id="toggleScanBtn" class="bg-emerald-500 hover:bg-emerald-600 transition text-white font-bold px-5 py-2 rounded-xl">▶️ دەستپێکردنی سکان</button>
       </div>
       <div class="grid md:grid-cols-2 gap-6">
         <div class="relative w-full aspect-video bg-black rounded-2xl overflow-hidden">
           <video id="attVideo" autoplay muted playsinline class="w-full h-full object-cover"></video>
-          <canvas id="attOverlay" class="absolute top-0 right-0 w-full h-full"></canvas>
+          <canvas id="overlay-att" class="w-full h-full"></canvas>
         </div>
         <div>
-          <h3 class="font-bold text-slate-300 mb-2">غیابی ئەمڕۆ (<span id="presentCount">0</span>)</h3>
-          <div id="liveList" class="flex flex-col gap-2 max-h-96 overflow-y-auto"></div>
+          <div class="flex gap-3 text-xs mb-2">
+            <span class="text-emerald-400">✅ گەیشتوو: <b id="presentCount">0</b></span>
+            <span class="text-red-400">❌ نەهاتوو: <b id="absentCount">0</b></span>
+            <span class="text-slate-400">⏳ چاوەڕوان: <b id="pendingCount">0</b></span>
+          </div>
+          <div id="rosterList" class="flex flex-col gap-2 max-h-[26rem] overflow-y-auto"></div>
         </div>
       </div>
     </div>
   </section>
 
-  <!-- REPORT TAB -->
+  <!-- REPORT -->
   <section id="tab-report" class="tab-panel hidden">
     <div class="glass rounded-2xl p-5">
       <div class="flex items-center gap-3 mb-4 flex-wrap">
-        <label class="text-sm text-slate-300">ڕێکەوت:</label>
-        <input id="reportDate" type="date" class="bg-slate-800/70 border border-slate-700 rounded-xl px-3 py-2 outline-none focus:border-emerald-400">
-        <button id="loadReportBtn" class="bg-blue-600 hover:bg-blue-700 transition text-white font-semibold px-4 py-2 rounded-xl text-sm">پیشاندان</button>
-        <button id="exportCsvBtn" class="bg-slate-700 hover:bg-slate-600 transition text-white font-semibold px-4 py-2 rounded-xl text-sm">⬇️ CSV</button>
+        <label class="text-sm text-slate-300">کەمترین ڕۆژی غیاب:</label>
+        <input id="minAbsentDays" type="number" value="3" min="1" class="w-20 bg-slate-800/70 border border-slate-700 rounded-xl px-3 py-2 outline-none focus:border-emerald-400">
+        <button id="loadReportBtn" class="bg-blue-600 hover:bg-blue-700 transition text-white font-semibold px-4 py-2 rounded-xl text-sm">بارکردنی ڕاپۆرت</button>
+        <span id="reportMsg" class="text-xs text-slate-400"></span>
       </div>
       <div class="overflow-x-auto">
         <table class="w-full text-sm">
-          <thead>
-            <tr class="text-slate-400 border-b border-slate-700">
-              <th class="text-right py-2">ناو</th>
-              <th class="text-right py-2">پۆل</th>
-              <th class="text-right py-2">کاتژمێر</th>
-            </tr>
-          </thead>
+          <thead><tr class="text-slate-400 border-b border-slate-700">
+            <th class="text-right py-2">ناو</th><th class="text-right py-2">پۆل</th><th class="text-right py-2">ژمارەی ڕۆژی غیاب</th>
+          </tr></thead>
           <tbody id="reportBody"></tbody>
         </table>
       </div>
     </div>
   </section>
 
-  <!-- STUDENTS TAB -->
+  <!-- STUDENTS -->
   <section id="tab-students" class="tab-panel hidden">
     <div class="glass rounded-2xl p-5">
       <div class="overflow-x-auto">
         <table class="w-full text-sm">
-          <thead>
-            <tr class="text-slate-400 border-b border-slate-700">
-              <th class="text-right py-2">ناو</th>
-              <th class="text-right py-2">پۆل</th>
-              <th class="text-right py-2">کردار</th>
-            </tr>
-          </thead>
+          <thead><tr class="text-slate-400 border-b border-slate-700">
+            <th class="text-right py-2">ناو</th><th class="text-right py-2">پۆل</th><th class="text-right py-2">کردار</th>
+          </tr></thead>
           <tbody id="studentsBody"></tbody>
         </table>
       </div>
@@ -136,18 +143,40 @@
 
 </div>
 
+<!-- hidden template used to render PDF export via html2canvas -->
+<div id="pdfExportArea" style="position:fixed; top:-99999px; right:0; width:700px; background:#fff; color:#111; padding:24px;" dir="rtl">
+  <h2 id="pdfTitle" style="font-family:'Noto Kufi Arabic',sans-serif; margin-bottom:4px;"></h2>
+  <p id="pdfSubtitle" style="font-family:'Noto Kufi Arabic',sans-serif; color:#555; margin-bottom:16px;"></p>
+  <table id="pdfTable" style="width:100%; border-collapse:collapse; font-family:'Noto Kufi Arabic',sans-serif; font-size:13px;">
+    <thead><tr style="background:#2c5444; color:#fff;">
+      <th style="padding:8px; text-align:right;">ڕێکەوت</th><th style="padding:8px; text-align:right;">دۆخ</th><th style="padding:8px; text-align:right;">کاتژمێر</th>
+    </tr></thead>
+    <tbody id="pdfTableBody"></tbody>
+  </table>
+</div>
+
 <script>
-// ---------- Firebase ----------
+const { initializeApp, getFirestore, collection, doc, getDoc, getDocs, setDoc, deleteDoc, onSnapshot, query, where, collectionGroup, serverTimestamp } = window.__fb;
+
 const firebaseConfig = {
-  apiKey: "AIzaSyD3gM3NTJPWz_Gr2Y7RuGNVRNOabyMtPKQ",
-  authDomain: "booking-3170f.firebaseapp.com",
-  projectId: "booking-3170f",
-  storageBucket: "booking-3170f.firebasestorage.app",
-  messagingSenderId: "203735208883",
-  appId: "1:203735208883:web:a41f37d48f37c79610b1c6"
+  apiKey: "AIzaSyAsDs_tQemRJwwjH0m8U2YvlqZjWXHEO0k",
+  authDomain: "test-school-53999.firebaseapp.com",
+  projectId: "test-school-53999",
+  storageBucket: "test-school-53999.firebasestorage.app",
+  messagingSenderId: "847312056047",
+  appId: "1:847312056047:web:44f84a1bb21e49d0b7751a"
 };
-firebase.initializeApp(firebaseConfig);
-const db = firebase.firestore();
+const app = initializeApp(firebaseConfig);
+const db = getFirestore(app);
+
+const STATUS_LABELS = {
+  present: { label: 'گەیشتووە', emoji: '✅' },
+  absent: { label: 'نەهاتووە', emoji: '❌' },
+  'forgot-card': { label: 'بیرچووە', emoji: '🔵' },
+  leave: { label: 'مۆڵەت', emoji: '🟡' },
+};
+
+function todayStr() { return new Date().toISOString().slice(0,10); }
 
 // ---------- Tabs ----------
 document.querySelectorAll('.tab-btn').forEach(btn => {
@@ -157,41 +186,61 @@ document.querySelectorAll('.tab-btn').forEach(btn => {
     btn.classList.add('tab-active');
     document.getElementById('tab-' + btn.dataset.tab).classList.remove('hidden');
     if (btn.dataset.tab === 'students') renderStudentsTable();
-    if (btn.dataset.tab === 'attend') document.getElementById('todayDate').textContent = todayStr();
+    if (btn.dataset.tab === 'attend') { document.getElementById('todayDate').textContent = todayStr(); renderRoster(); }
   });
 });
 
-function todayStr() {
-  const d = new Date();
-  return d.toISOString().slice(0,10);
-}
-
 // ---------- Model loading ----------
-const MODEL_URL = 'https://cdn.jsdelivr.net/gh/justadudewhohacks/face-api.js/weights';
+const MODEL_URLS = [
+  'https://justadudewhohacks.github.io/face-api.js/models',
+  'https://cdn.jsdelivr.net/gh/justadudewhohacks/face-api.js@master/weights',
+  'https://raw.githubusercontent.com/justadudewhohacks/face-api.js/master/weights'
+];
 let modelsReady = false;
 
 async function loadModels() {
-  await faceapi.nets.tinyFaceDetector.loadFromUri(MODEL_URL);
-  await faceapi.nets.faceLandmark68Net.loadFromUri(MODEL_URL);
-  await faceapi.nets.faceRecognitionNet.loadFromUri(MODEL_URL);
-  modelsReady = true;
-  document.getElementById('statusLine').textContent = 'مۆدێلەکان بارکران ✅ — کامێراکان ئامادەن';
+  const statusEl = document.getElementById('statusLine');
+  for (let i = 0; i < MODEL_URLS.length; i++) {
+    try {
+      statusEl.textContent = `بارکردنی مۆدێلەکان لە سەرچاوەی ${i + 1}...`;
+      await faceapi.nets.tinyFaceDetector.loadFromUri(MODEL_URLS[i]);
+      await faceapi.nets.faceLandmark68Net.loadFromUri(MODEL_URLS[i]);
+      await faceapi.nets.faceRecognitionNet.loadFromUri(MODEL_URLS[i]);
+      modelsReady = true;
+      statusEl.textContent = 'مۆدێلەکان بارکران ✅';
+      return;
+    } catch (e) { console.warn('Model source failed:', MODEL_URLS[i], e); }
+  }
+  statusEl.textContent = '❌ نەتوانرا مۆدێلەکان باربکرێن.';
 }
 loadModels();
 
-async function startCamera(videoEl) {
-  const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'user' } });
+// ---------- Camera with front/back switch ----------
+const camState = { reg: 'user', att: 'user' };
+const streams = { reg: null, att: null };
+
+async function startCamera(key, videoEl) {
+  if (streams[key]) streams[key].getTracks().forEach(t => t.stop());
+  const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: camState[key] } });
+  streams[key] = stream;
   videoEl.srcObject = stream;
   return new Promise(res => { videoEl.onloadedmetadata = () => res(); });
 }
 
-// ---------- Register tab ----------
-const regVideo = document.getElementById('regVideo');
-let regDescriptor = null;
-
-startCamera(regVideo).catch(err => {
-  document.getElementById('regMsg').textContent = 'نەتوانرا کامێرا بکرێتەوە: ' + err.message;
+document.getElementById('switchCamReg').addEventListener('click', async () => {
+  camState.reg = camState.reg === 'user' ? 'environment' : 'user';
+  await startCamera('reg', document.getElementById('regVideo'));
 });
+document.getElementById('switchCamAtt').addEventListener('click', async () => {
+  camState.att = camState.att === 'user' ? 'environment' : 'user';
+  await startCamera('att', document.getElementById('attVideo'));
+});
+
+const regVideo = document.getElementById('regVideo');
+startCamera('reg', regVideo).catch(err => { document.getElementById('regMsg').textContent = 'نەتوانرا کامێرا بکرێتەوە: ' + err.message; });
+
+// ---------- Register ----------
+let regDescriptor = null;
 
 document.getElementById('captureBtn').addEventListener('click', async () => {
   const msg = document.getElementById('regMsg');
@@ -218,10 +267,8 @@ document.getElementById('saveStudentBtn').addEventListener('click', async () => 
   if (!name) { msg.textContent = 'تکایە ناوی قوتابی بنووسە.'; return; }
   if (!regDescriptor) { msg.textContent = 'تکایە یەکەم جار وێنە بگرە.'; return; }
   try {
-    await db.collection('students').add({
-      name, class: cls, descriptor: regDescriptor,
-      createdAt: firebase.firestore.FieldValue.serverTimestamp()
-    });
+    const newRef = doc(collection(db, 'students'));
+    await setDoc(newRef, { name, class: cls, descriptor: regDescriptor, createdAt: serverTimestamp() });
     msg.textContent = '✅ قوتابی بە سەرکەوتوویی تۆمارکرا.';
     document.getElementById('regName').value = '';
     document.getElementById('regClass').value = '';
@@ -229,17 +276,14 @@ document.getElementById('saveStudentBtn').addEventListener('click', async () => 
     document.getElementById('regPreview').classList.add('hidden');
     document.getElementById('saveStudentBtn').disabled = true;
     studentsCache = null;
-  } catch (e) {
-    msg.textContent = 'هەڵە: ' + e.message;
-  }
+  } catch (e) { msg.textContent = 'هەڵە: ' + e.message; }
 });
 
-// ---------- Students cache / table ----------
+// ---------- Students cache ----------
 let studentsCache = null;
-
 async function fetchStudents() {
   if (studentsCache) return studentsCache;
-  const snap = await db.collection('students').get();
+  const snap = await getDocs(collection(db, 'students'));
   studentsCache = snap.docs.map(d => ({ id: d.id, ...d.data() }));
   return studentsCache;
 }
@@ -251,37 +295,92 @@ async function renderStudentsTable() {
     <tr class="border-b border-slate-800">
       <td class="py-2">${s.name}</td>
       <td class="py-2">${s.class || '-'}</td>
-      <td class="py-2"><button data-id="${s.id}" class="del-student text-red-400 hover:text-red-300 text-xs">سڕینەوە</button></td>
+      <td class="py-2"><button data-id="${s.id}" data-name="${s.name}" class="del-student text-red-400 hover:text-red-300 text-xs">📄 دەرهێنانی مێژوو و سڕینەوە</button></td>
     </tr>`).join('') || `<tr><td colspan="3" class="py-4 text-slate-500 text-center">هیچ قوتابییەک تۆمار نەکراوە</td></tr>`;
   document.querySelectorAll('.del-student').forEach(btn => {
-    btn.addEventListener('click', async () => {
-      if (!confirm('دڵنیایت لە سڕینەوە؟')) return;
-      await db.collection('students').doc(btn.dataset.id).delete();
-      studentsCache = null;
-      renderStudentsTable();
-    });
+    btn.addEventListener('click', () => deleteStudentWithHistory(btn.dataset.id, btn.dataset.name));
   });
 }
 
-// ---------- Attendance scanning ----------
+// ---------- Attendance: roster + live status ----------
+let currentAttendanceMap = {}; // studentId -> {status, time}
+
+function subscribeTodayAttendance() {
+  const q = collection(db, 'attendance', todayStr(), 'records');
+  return onSnapshot(q, (snap) => {
+    currentAttendanceMap = {};
+    snap.docs.forEach(d => currentAttendanceMap[d.id] = d.data());
+    renderRoster();
+  });
+}
+let unsubToday = subscribeTodayAttendance();
+
+async function renderRoster() {
+  const students = await fetchStudents();
+  const list = document.getElementById('rosterList');
+  let present = 0, absent = 0, pending = 0;
+
+  list.innerHTML = students.map(s => {
+    const rec = currentAttendanceMap[s.id];
+    const status = rec ? rec.status : null;
+    if (status === 'present') present++; else if (status === 'absent') absent++; else pending++;
+    const time = rec && rec.time ? new Date(rec.time).toLocaleTimeString('en-GB') : '';
+    return `
+    <div class="flex items-center justify-between bg-slate-800/50 rounded-xl px-3 py-2">
+      <div>
+        <div class="font-semibold text-sm">${s.name}</div>
+        <div class="text-xs text-slate-400">${s.class || ''} ${time ? '· ' + time : ''}</div>
+      </div>
+      <div class="flex gap-1">
+        ${Object.entries(STATUS_LABELS).map(([key, info]) => `
+          <button data-id="${s.id}" data-status="${key}" class="set-status-btn status-chip ${status === key ? 'active-' + key : 'idle'}">${info.emoji}</button>
+        `).join('')}
+      </div>
+    </div>`;
+  }).join('') || `<p class="text-slate-500 text-sm">هیچ قوتابییەک تۆمار نەکراوە</p>`;
+
+  document.getElementById('presentCount').textContent = present;
+  document.getElementById('absentCount').textContent = absent;
+  document.getElementById('pendingCount').textContent = pending;
+
+  document.querySelectorAll('.set-status-btn').forEach(btn => {
+    btn.addEventListener('click', () => manualSetStatus(btn.dataset.id, btn.dataset.status));
+  });
+}
+
+async function manualSetStatus(studentId, status) {
+  const students = await fetchStudents();
+  const s = students.find(x => x.id === studentId);
+  if (!s) return;
+  await setDoc(doc(db, 'attendance', todayStr(), 'records', studentId), {
+    studentId, name: s.name, class: s.class || '', status,
+    time: new Date().toISOString(), timestamp: serverTimestamp()
+  }, { merge: true });
+}
+
+document.getElementById('markRestAbsentBtn').addEventListener('click', async () => {
+  if (!confirm('هەموو ئەو قوتابیانەی هێشتا دۆخیان دیاری نەکراوە بکرێن بە "نەهاتوو"؟')) return;
+  const students = await fetchStudents();
+  const jobs = students.filter(s => !currentAttendanceMap[s.id]).map(s => manualSetStatus(s.id, 'absent'));
+  await Promise.all(jobs);
+});
+
+// ---------- Scanning loop ----------
 const attVideo = document.getElementById('attVideo');
-const attOverlay = document.getElementById('attOverlay');
+const attOverlay = document.getElementById('overlay-att');
 let scanning = false;
 let scanLoopHandle = null;
 let faceMatcher = null;
-let markedToday = new Set();
-let presentCount = 0;
 
 document.getElementById('toggleScanBtn').addEventListener('click', async () => {
   const btn = document.getElementById('toggleScanBtn');
   if (!scanning) {
     if (!modelsReady) { alert('چاوەڕێی بارکردنی مۆدێلەکان بکە.'); return; }
-    await startCamera(attVideo);
+    await startCamera('att', attVideo);
     const students = await fetchStudents();
     if (students.length === 0) { alert('هیچ قوتابییەک تۆمار نەکراوە.'); return; }
     const labeled = students.map(s => new faceapi.LabeledFaceDescriptors(s.id, [new Float32Array(s.descriptor)]));
     faceMatcher = new faceapi.FaceMatcher(labeled, 0.5);
-    await loadTodayAttendance();
     scanning = true;
     btn.textContent = '⏸ ڕاگرتنی سکان';
     scanLoop(students);
@@ -289,33 +388,9 @@ document.getElementById('toggleScanBtn').addEventListener('click', async () => {
     scanning = false;
     btn.textContent = '▶️ دەستپێکردنی سکان';
     if (scanLoopHandle) cancelAnimationFrame(scanLoopHandle);
-    const stream = attVideo.srcObject;
-    if (stream) stream.getTracks().forEach(t => t.stop());
+    if (streams.att) streams.att.getTracks().forEach(t => t.stop());
   }
 });
-
-async function loadTodayAttendance() {
-  markedToday = new Set();
-  presentCount = 0;
-  document.getElementById('liveList').innerHTML = '';
-  const snap = await db.collection('attendance').where('date', '==', todayStr()).get();
-  const students = await fetchStudents();
-  const byId = Object.fromEntries(students.map(s => [s.id, s]));
-  snap.docs.forEach(d => {
-    const data = d.data();
-    markedToday.add(data.studentId);
-    presentCount++;
-    addLiveRow(byId[data.studentId] || { name: data.name, class: data.class }, data.time);
-  });
-  document.getElementById('presentCount').textContent = presentCount;
-}
-
-function addLiveRow(student, time) {
-  const row = document.createElement('div');
-  row.className = 'flex items-center justify-between bg-slate-800/50 rounded-xl px-3 py-2';
-  row.innerHTML = `<span class="font-semibold">${student.name}</span><span class="text-xs text-slate-400">${student.class || ''} · ${time}</span>`;
-  document.getElementById('liveList').prepend(row);
-}
 
 async function scanLoop(students) {
   if (!scanning) return;
@@ -341,54 +416,87 @@ async function scanLoop(students) {
     ctx.font = '18px sans-serif';
     ctx.fillText(label, box.x, box.y - 8);
 
-    if (isKnown && !markedToday.has(match.label)) {
-      markedToday.add(match.label);
-      const student = byId[match.label];
-      const now = new Date();
-      const time = now.toLocaleTimeString('en-GB');
-      db.collection('attendance').add({
-        studentId: match.label,
-        name: student.name,
-        class: student.class || '',
-        date: todayStr(),
-        time,
-        timestamp: firebase.firestore.FieldValue.serverTimestamp()
-      });
-      presentCount++;
-      document.getElementById('presentCount').textContent = presentCount;
-      addLiveRow(student, time);
+    if (isKnown && (!currentAttendanceMap[match.label] || currentAttendanceMap[match.label].status !== 'present')) {
+      manualSetStatus(match.label, 'present');
     }
   }
   scanLoopHandle = requestAnimationFrame(() => scanLoop(students));
 }
 
-// ---------- Report tab ----------
-document.getElementById('reportDate').value = todayStr();
-
-document.getElementById('loadReportBtn').addEventListener('click', loadReport);
-
-async function loadReport() {
-  const date = document.getElementById('reportDate').value || todayStr();
-  const snap = await db.collection('attendance').where('date', '==', date).orderBy('time').get();
-  const body = document.getElementById('reportBody');
-  body.innerHTML = snap.docs.map(d => {
+// ---------- Report: students with N+ absent days ----------
+document.getElementById('loadReportBtn').addEventListener('click', async () => {
+  const min = parseInt(document.getElementById('minAbsentDays').value, 10) || 3;
+  const msg = document.getElementById('reportMsg');
+  msg.textContent = 'بارکردن...';
+  const q = query(collectionGroup(db, 'records'), where('status', '==', 'absent'));
+  const snap = await getDocs(q);
+  const counts = {}; // studentId -> {count, name, class}
+  snap.docs.forEach(d => {
     const r = d.data();
-    return `<tr class="border-b border-slate-800"><td class="py-2">${r.name}</td><td class="py-2">${r.class || '-'}</td><td class="py-2">${r.time}</td></tr>`;
-  }).join('') || `<tr><td colspan="3" class="py-4 text-slate-500 text-center">هیچ غیابێک نییە بۆ ئەم ڕۆژە</td></tr>`;
-  window.__lastReport = snap.docs.map(d => d.data());
+    if (!r.studentId) return;
+    if (!counts[r.studentId]) counts[r.studentId] = { count: 0, name: r.name, class: r.class };
+    counts[r.studentId].count++;
+  });
+  const rows = Object.values(counts).filter(c => c.count >= min).sort((a,b) => b.count - a.count);
+  const body = document.getElementById('reportBody');
+  body.innerHTML = rows.map(r => `
+    <tr class="border-b border-slate-800">
+      <td class="py-2">${r.name}</td><td class="py-2">${r.class || '-'}</td>
+      <td class="py-2 text-red-400 font-bold">${r.count}</td>
+    </tr>`).join('') || `<tr><td colspan="3" class="py-4 text-slate-500 text-center">هیچ قوتابییەک نییە بەم مەرجە</td></tr>`;
+  msg.textContent = `${rows.length} قوتابی دۆزرایەوە`;
+});
+
+// ---------- Delete student: export full history to PDF first ----------
+async function deleteStudentWithHistory(studentId, studentName) {
+  if (!confirm(`پێش سڕینەوەی "${studentName}"، دەرهێنانی مێژووی تەواوی غیاب وەک PDF. بەردەوام بیت؟`)) return;
+
+  const q = query(collectionGroup(db, 'records'), where('studentId', '==', studentId));
+  const snap = await getDocs(q);
+  const rows = snap.docs.map(d => {
+    const r = d.data();
+    const date = d.ref.parent.parent.id;
+    return { date, status: r.status, time: r.time ? new Date(r.time).toLocaleTimeString('en-GB') : '' };
+  }).sort((a,b) => a.date.localeCompare(b.date));
+
+  await buildAndDownloadPdf(studentName, rows);
+
+  await deleteDoc(doc(db, 'students', studentId));
+  studentsCache = null;
+  renderStudentsTable();
+  alert('✅ مێژووی قوتابی داگیرا وەک PDF و قوتابییەکە سڕایەوە.');
 }
 
-document.getElementById('exportCsvBtn').addEventListener('click', () => {
-  const rows = window.__lastReport || [];
-  if (rows.length === 0) { alert('هیچ داتایەک نییە بۆ دەرهێنان.'); return; }
-  let csv = 'Name,Class,Time,Date\n';
-  rows.forEach(r => { csv += `${r.name},${r.class || ''},${r.time},${r.date}\n`; });
-  const blob = new Blob([csv], { type: 'text/csv' });
-  const a = document.createElement('a');
-  a.href = URL.createObjectURL(blob);
-  a.download = `attendance_${document.getElementById('reportDate').value}.csv`;
-  a.click();
-});
+async function buildAndDownloadPdf(studentName, rows) {
+  document.getElementById('pdfTitle').textContent = `مێژووی غیابی: ${studentName}`;
+  document.getElementById('pdfSubtitle').textContent = `کۆی تۆمارەکان: ${rows.length} — دەرهێنراوە لە ${todayStr()}`;
+  document.getElementById('pdfTableBody').innerHTML = rows.map(r => `
+    <tr style="border-bottom:1px solid #eee;">
+      <td style="padding:6px;">${r.date}</td>
+      <td style="padding:6px;">${STATUS_LABELS[r.status]?.emoji || ''} ${STATUS_LABELS[r.status]?.label || r.status}</td>
+      <td style="padding:6px;">${r.time}</td>
+    </tr>`).join('') || `<tr><td colspan="3" style="padding:12px; text-align:center; color:#888;">هیچ تۆمارێک نییە</td></tr>`;
+
+  const area = document.getElementById('pdfExportArea');
+  const canvas = await html2canvas(area, { scale: 2, backgroundColor: '#ffffff' });
+  const { jsPDF } = window.jspdf;
+  const pdf = new jsPDF('p', 'mm', 'a4');
+  const pageWidth = 210, pageHeight = 297;
+  const imgWidth = pageWidth;
+  const imgHeight = (canvas.height * imgWidth) / canvas.width;
+  let heightLeft = imgHeight, position = 0;
+  const imgData = canvas.toDataURL('image/png');
+
+  pdf.addImage(imgData, 'PNG', 0, position, imgWidth, imgHeight);
+  heightLeft -= pageHeight;
+  while (heightLeft > 0) {
+    position = heightLeft - imgHeight;
+    pdf.addPage();
+    pdf.addImage(imgData, 'PNG', 0, position, imgWidth, imgHeight);
+    heightLeft -= pageHeight;
+  }
+  pdf.save(`attendance-history-${studentName}.pdf`);
+}
 
 document.getElementById('todayDate').textContent = todayStr();
 </script>
