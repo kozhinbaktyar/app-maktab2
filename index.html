@@ -125,7 +125,7 @@
       <div class="overflow-x-auto">
         <table class="w-full text-sm">
           <thead><tr class="text-slate-400 border-b border-slate-700">
-            <th class="text-right py-2">ناو</th><th class="text-right py-2">پۆل</th><th class="text-right py-2">کردار</th>
+            <th class="text-right py-2">ناو</th><th class="text-right py-2">پۆل</th><th class="text-right py-2">کۆدی پەیوەستکردن</th><th class="text-right py-2">کردار</th>
           </tr></thead>
           <tbody id="studentsBody"></tbody>
         </table>
@@ -263,9 +263,10 @@ document.getElementById('saveStudentBtn').addEventListener('click', async () => 
   if (!name) { msg.textContent = 'تکایە ناوی قوتابی بنووسە.'; return; }
   if (!regDescriptor) { msg.textContent = 'تکایە یەکەم جار وێنە بگرە.'; return; }
   try {
+    const linkCode = String(Math.floor(100000 + Math.random() * 900000));
     const newRef = doc(collection(db, 'students'));
-    await setDoc(newRef, { name, class: cls, descriptor: regDescriptor, createdAt: serverTimestamp() });
-    msg.textContent = '✅ قوتابی بە سەرکەوتوویی تۆمارکرا.';
+    await setDoc(newRef, { name, class: cls, descriptor: regDescriptor, linkCode, createdAt: serverTimestamp() });
+    msg.innerHTML = `✅ قوتابی تۆمارکرا. کۆدی پەیوەستکردن بۆ باوان: <b class="text-emerald-400 text-lg">${linkCode}</b>`;
     document.getElementById('regName').value = '';
     document.getElementById('regClass').value = '';
     regDescriptor = null;
@@ -291,8 +292,9 @@ async function renderStudentsTable() {
     <tr class="border-b border-slate-800">
       <td class="py-2">${s.name}</td>
       <td class="py-2">${s.class || '-'}</td>
+      <td class="py-2 font-mono text-emerald-400">${s.linkCode || '—'}</td>
       <td class="py-2"><button data-id="${s.id}" data-name="${s.name}" class="del-student text-red-400 hover:text-red-300 text-xs">📄 دەرهێنانی مێژوو و سڕینەوە</button></td>
-    </tr>`).join('') || `<tr><td colspan="3" class="py-4 text-slate-500 text-center">هیچ قوتابییەک تۆمار نەکراوە</td></tr>`;
+    </tr>`).join('') || `<tr><td colspan="4" class="py-4 text-slate-500 text-center">هیچ قوتابییەک تۆمار نەکراوە</td></tr>`;
   document.querySelectorAll('.del-student').forEach(btn => {
     btn.addEventListener('click', () => deleteStudentWithHistory(btn.dataset.id, btn.dataset.name));
   });
